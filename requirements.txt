@@ -1,0 +1,11 @@
+# Pitch Scout — Shape Optimizer
+# Pinned to the versions the app was developed and tested on locally, so the
+# deployed environment on Streamlit Community Cloud matches exactly. The xgboost
+# pin matters most: it must match the version that trained the .ubj models in
+# data/stuff_models_native/ so they load and predict consistently.
+
+streamlit==1.54.0
+xgboost==3.2.0
+numpy==2.4.2
+pandas==2.3.3
+scipy==1.17.1

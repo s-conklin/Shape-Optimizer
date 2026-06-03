@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Streamlit local secrets (never commit credentials)
+.streamlit/secrets.toml
+
+# Notebooks scratch
+.ipynb_checkpoints/
+
+# Local data exploration / large raw inputs that shouldn't ship
+# (the trained model pkls in data/ ARE committed — see README; raw CSVs are not)
+*.csv
+!data/pitch_leaderboard.csv
+raw_data/
+scratch/
+dev/
+
+# Large training-only artifacts the deployed app does NOT load at runtime.
+# Keep these out of the repo — they're huge and unused by shape_optimizer.py.
+data/league_model.pkl
+data/at_bat_sequences.pkl
+data/pitches_clean.parquet
+data/stuff_models.pkl
+data/sequence_stats.pkl
+data/pitcher_profiles.pkl
+*.parquet
+data/*.zip
+
+# Diagnostic scripts kept out of the deployed app (optional: move to dev/)
+diagnose_grade.py
+compare_paths.py
