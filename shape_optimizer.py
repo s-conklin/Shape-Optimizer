@@ -27,39 +27,47 @@ st.markdown("""
 
 html, body, [class*="css"] {
     font-family: 'DM Mono', monospace;
-    background-color: #0d1117;
-    color: #e8edf8;
+    background-color: #efece5;
+    color: #3a352c;
 }
-.stApp { background: #0d1117; }
+.stApp { background: #efece5; }
 h1, h2, h3 { font-family: 'Barlow Condensed', sans-serif !important; letter-spacing: 0.04em; }
 #MainMenu, footer, header { visibility: hidden; }
 .block-container { padding: 1.5rem 2rem 2rem; max-width: 1400px; }
 
-.stTabs [data-baseweb="tab-list"] { background: #0d1117; border-bottom: 1px solid #1e2538; gap: 0; }
+.stTabs [data-baseweb="tab-list"] { background: #efece5; border-bottom: 1px solid #e0dbd0; gap: 0; }
 .stTabs [data-baseweb="tab"] {
     font-family: 'Barlow Condensed', sans-serif; font-size: 0.85rem; font-weight: 700;
-    letter-spacing: 0.1em; text-transform: uppercase; color: #4a5270;
+    letter-spacing: 0.1em; text-transform: uppercase; color: #8c857a;
     padding: 0.6rem 1.4rem; border-bottom: 2px solid transparent;
 }
-.stTabs [aria-selected="true"] { color: #4db8ff; border-bottom: 2px solid #4db8ff; background: transparent; }
+.stTabs [aria-selected="true"] { color: #185FA5; border-bottom: 2px solid #185FA5; background: transparent; }
 
 .stSelectbox > div > div {
-    background: #141927; border: 1px solid #1e2538; border-radius: 6px;
-    font-family: 'DM Mono', monospace; font-size: 0.8rem; color: #e8edf8;
+    background: #faf8f4; border: 1px solid #d8d2c6; border-radius: 6px;
+    font-family: 'DM Mono', monospace; font-size: 0.8rem; color: #3a352c;
+}
+.stSelectbox input, .stSelectbox div[data-baseweb="select"] input {
+    color: #3a352c !important; -webkit-text-fill-color: #3a352c !important;
+    font-family: 'DM Mono', monospace;
+}
+.stSelectbox input::placeholder { color: #8c857a !important; -webkit-text-fill-color: #8c857a !important; }
+div[data-baseweb="popover"] li, ul[role="listbox"] li {
+    color: #3a352c; font-family: 'DM Mono', monospace; font-size: 0.8rem;
 }
 .stTextInput > div > div > input {
-    background: #141927; border: 1px solid #1e2538; border-radius: 6px;
-    font-family: 'DM Mono', monospace; color: #e8edf8;
+    background: #faf8f4; border: 1px solid #e0dbd0; border-radius: 6px;
+    font-family: 'DM Mono', monospace; color: #3a352c;
 }
 .stButton > button {
-    background: linear-gradient(135deg, #3C3489, #534AB7); color: #fff;
+    background: #185FA5; color: #fff;
     font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 0.9rem;
     letter-spacing: 0.1em; text-transform: uppercase; border: none;
     border-radius: 6px; padding: 0.5rem 1.5rem;
 }
-.stButton > button:hover { opacity: 0.85; }
+.stButton > button:hover { background: #0C447C; }
 .stRadio > div { flex-direction: row; gap: 1rem; }
-.stRadio label { font-family: 'DM Mono', monospace; font-size: 0.75rem; color: #8892b0; }
+.stRadio label { font-family: 'DM Mono', monospace; font-size: 0.75rem; color: #8c857a; }
 div[data-testid="stMetricValue"] { font-family: 'Barlow Condensed', sans-serif; font-size: 2rem; font-weight: 800; }
 </style>
 """, unsafe_allow_html=True)
@@ -83,6 +91,20 @@ PITCH_COLORS = {
 
 def pitch_name(pt): return PITCH_NAMES.get(pt, pt)
 def pitch_color(pt): return PITCH_COLORS.get(pt, '#8892b0')
+
+
+def to_first_last(name):
+    """Convert a stored 'Last, First' name to 'First Last' for display.
+    Leaves names without a comma unchanged (already 'First Last' or single token).
+    Handles suffixes that follow the first name after the comma, e.g.
+    'Tatis Jr., Fernando' -> 'Fernando Tatis Jr.'."""
+    if not name or ',' not in name:
+        return name or ''
+    last, first = name.split(',', 1)
+    last, first = last.strip(), first.strip()
+    if not first:
+        return last
+    return f"{first} {last}"
 
 # ── Data loading ──────────────────────────────────────────────────────────
 @st.cache_resource
@@ -170,9 +192,9 @@ def compute_contact_plus(pred_hh, pred_xw, p_throws, stand, pt, norm_tables):
     return 100.0
 
 def grade_color(val, base=100):
-    if val >= base + 15: return '#10b981'
-    if val >= base + 5:  return '#4db8ff'
-    if val >= base - 5:  return '#e8edf8'
+    if val >= base + 15: return '#1D9E75'
+    if val >= base + 5:  return '#378ADD'
+    if val >= base - 5:  return '#3a352c'
     if val >= base - 15: return '#f59e0b'
     return '#ef4444'
 
@@ -349,7 +371,7 @@ def render_shape_card(title, pt, current_grades, opt_grades,
 
     def delta_html(d, invert=False):
         better = (d < 0) if invert else (d > 0)
-        col  = '#10b981' if better else ('#ef4444' if abs(d) > 0.5 else '#4a5270')
+        col  = '#1D9E75' if better else ('#ef4444' if abs(d) > 0.5 else '#8c857a')
         sign = '+' if d > 0 else ''
         return f'<span style="font-family:DM Mono,monospace;font-size:0.7rem;color:{col};">{sign}{d}</span>'
 
@@ -361,31 +383,31 @@ def render_shape_card(title, pt, current_grades, opt_grades,
             f'<div style="font-family:Barlow Condensed,sans-serif;font-size:{size};'
             f'font-weight:900;color:{c};line-height:1;">{val:.0f}</div>'
             f'<div style="font-family:DM Mono,monospace;font-size:0.55rem;'
-            f'color:#4a5270;text-transform:uppercase;letter-spacing:0.1em;">{label}</div>'
+            f'color:#8c857a;text-transform:uppercase;letter-spacing:0.1em;">{label}</div>'
             f'</div>'
         )
 
     def arrow_stat(label, curr_val, opt_val, unit='&quot;'):
         delta = round(opt_val - curr_val, 1)
         sign  = '+' if delta > 0 else ''
-        dcol  = '#10b981' if delta > 0 else ('#ef4444' if delta < -0.05 else '#4a5270')
+        dcol  = '#1D9E75' if delta > 0 else ('#ef4444' if delta < -0.05 else '#8c857a')
         return (
-            f'<div style="background:#0d1117;border-radius:6px;padding:8px 12px;margin-bottom:6px;">'
+            f'<div style="background:#efece5;border-radius:6px;padding:8px 12px;margin-bottom:6px;">'
             f'<div style="font-family:Barlow Condensed,sans-serif;font-size:0.6rem;font-weight:700;'
-            f'color:#4a5270;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:6px;">{label}</div>'
+            f'color:#8c857a;text-transform:uppercase;letter-spacing:0.1em;margin-bottom:6px;">{label}</div>'
             f'<div style="display:flex;align-items:baseline;gap:8px;">'
-            f'<span style="font-family:DM Mono,monospace;font-size:0.85rem;color:#4a5270;">{curr_val:.1f}{unit}</span>'
-            f'<span style="font-family:DM Mono,monospace;font-size:0.75rem;color:#4a5270;">→</span>'
-            f'<span style="font-family:DM Mono,monospace;font-size:1.1rem;font-weight:500;color:#e8edf8;">{opt_val:.1f}{unit}</span>'
+            f'<span style="font-family:DM Mono,monospace;font-size:0.85rem;color:#8c857a;">{curr_val:.1f}{unit}</span>'
+            f'<span style="font-family:DM Mono,monospace;font-size:0.75rem;color:#8c857a;">→</span>'
+            f'<span style="font-family:DM Mono,monospace;font-size:1.1rem;font-weight:500;color:#3a352c;">{opt_val:.1f}{unit}</span>'
             f'<span style="font-family:DM Mono,monospace;font-size:0.85rem;color:{dcol};">{sign}{delta:.1f}{unit}</span>'
             f'</div></div>'
         )
 
     rv_sign = '+' if delta_rv > 0 else ''
-    rv_col  = '#ef4444' if delta_rv > 0 else '#10b981'
+    rv_col  = '#ef4444' if delta_rv > 0 else '#1D9E75'
 
     st.markdown(
-        f'<div style="background:#141927;border:1px solid rgba(255,255,255,0.07);'
+        f'<div style="background:#faf8f4;border:1px solid rgba(255,255,255,0.07);'
         f'border-top:3px solid {color};border-radius:0 0 8px 8px;padding:1.1rem 1.2rem;">'
         f'<div style="font-family:Barlow Condensed,sans-serif;font-size:0.6rem;font-weight:700;'
         f'color:{color};letter-spacing:0.14em;text-transform:uppercase;margin-bottom:0.9rem;">{title}</div>'
@@ -394,16 +416,16 @@ def render_shape_card(title, pt, current_grades, opt_grades,
         f'<div style="display:flex;align-items:center;justify-content:space-between;'
         f'margin-bottom:1rem;padding-bottom:0.9rem;border-bottom:1px solid rgba(255,255,255,0.06);">'
         f'<div>'
-        f'<div style="font-family:DM Mono,monospace;font-size:0.58rem;color:#4a5270;margin-bottom:4px;">CURRENT</div>'
+        f'<div style="font-family:DM Mono,monospace;font-size:0.58rem;color:#8c857a;margin-bottom:4px;">CURRENT</div>'
         f'<div style="display:flex;gap:1.5rem;align-items:flex-end;">'
         f'{grade_pill(sp_curr, "Stuff+", large=True)}'
         f'{grade_pill(ap_curr, "Arsenal+")}'
         f'{grade_pill(cp_curr, "Contact+")}'
         f'</div>'
         f'</div>'
-        f'<div style="font-size:1.2rem;color:#4a5270;">→</div>'
+        f'<div style="font-size:1.2rem;color:#8c857a;">→</div>'
         f'<div>'
-        f'<div style="font-family:DM Mono,monospace;font-size:0.58rem;color:#4db8ff;margin-bottom:4px;">OPTIMIZED</div>'
+        f'<div style="font-family:DM Mono,monospace;font-size:0.58rem;color:#378ADD;margin-bottom:4px;">OPTIMIZED</div>'
         f'<div style="display:flex;gap:1.5rem;align-items:flex-end;">'
         f'{grade_pill(sp_opt, "Stuff+", large=True)}'
         f'{grade_pill(ap_opt, "Arsenal+")}'
@@ -411,20 +433,20 @@ def render_shape_card(title, pt, current_grades, opt_grades,
         f'</div>'
         f'</div>'
         f'<div style="text-align:right;">'
-        f'<div style="font-family:DM Mono,monospace;font-size:0.58rem;color:#4a5270;margin-bottom:6px;">DELTA</div>'
+        f'<div style="font-family:DM Mono,monospace;font-size:0.58rem;color:#8c857a;margin-bottom:6px;">DELTA</div>'
         f'<div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;">'
         f'<div style="display:flex;align-items:center;gap:6px;">'
-        f'<span style="font-family:DM Mono,monospace;font-size:0.6rem;color:#4a5270;">Stuff+</span>'
+        f'<span style="font-family:DM Mono,monospace;font-size:0.6rem;color:#8c857a;">Stuff+</span>'
         f'{delta_html(delta_sp)}</div>'
         f'<div style="display:flex;align-items:center;gap:6px;">'
-        f'<span style="font-family:DM Mono,monospace;font-size:0.6rem;color:#4a5270;">Arsenal+</span>'
+        f'<span style="font-family:DM Mono,monospace;font-size:0.6rem;color:#8c857a;">Arsenal+</span>'
         f'{delta_html(delta_ap)}</div>'
         f'<div style="display:flex;align-items:center;gap:6px;">'
-        f'<span style="font-family:DM Mono,monospace;font-size:0.6rem;color:#4a5270;">Contact+</span>'
+        f'<span style="font-family:DM Mono,monospace;font-size:0.6rem;color:#8c857a;">Contact+</span>'
         f'{delta_html(delta_cp)}</div>'
         f'<div style="display:flex;align-items:center;gap:6px;margin-top:2px;padding-top:4px;'
         f'border-top:1px solid rgba(255,255,255,0.06);">'
-        f'<span style="font-family:DM Mono,monospace;font-size:0.6rem;color:#4a5270;">RV/100</span>'
+        f'<span style="font-family:DM Mono,monospace;font-size:0.6rem;color:#8c857a;">RV/100</span>'
         f'<span style="font-family:DM Mono,monospace;font-size:0.7rem;color:{rv_col};">'
         f'{rv_sign}{delta_rv}</span></div>'
         f'</div></div></div>',
@@ -468,8 +490,8 @@ def render_movement_chart(pt, current_pfx_x, current_pfx_z,
     dz = round(oz_f - cz_f, 1)
     sign = lambda v: ('+' if v > 0 else '') + str(v)
     dx_s = sign(dx); dz_s = sign(dz)
-    dx_col = '#059669' if dx != 0 else '#888'
-    dz_col = '#059669' if dz != 0 else '#888'
+    dx_col = '#1D9E75' if dx != 0 else '#888'
+    dz_col = '#1D9E75' if dz != 0 else '#888'
 
     # Real comp pitcher data
     comp_pitchers = comp_bounds.get('comp_pitchers', []) if comp_bounds else []
@@ -484,21 +506,21 @@ def render_movement_chart(pt, current_pfx_x, current_pfx_z,
     TGT_COLOR = '#f59e0b'
 
     html_parts = []
-    html_parts.append('<div style="background:#fff;border:1px solid #dde3ed;border-radius:10px;padding:1.2rem 1.4rem;margin-bottom:0.75rem;font-family:sans-serif;width:100%;">')
-    html_parts.append('<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:6px;">')
-    html_parts.append(f'<div><span style="font-size:14px;font-weight:700;color:#1a1a2e;">{pn} \u2014 Movement Profile (Induced Break)</span>')
+    html_parts.append('<div style="background:#faf8f4;border:1px solid #e0dbd0;border-radius:10px;padding:1.2rem 1.4rem;margin-bottom:0.75rem;font-family:sans-serif;width:100%;">')
+    html_parts.append('<div style="margin-bottom:10px;">')
+    html_parts.append(f'<div><span style="font-size:14px;font-weight:700;color:#3a352c;">{pn} \u2014 Movement Profile (Induced Break)</span>')
     html_parts.append(f'<span style="font-size:12px;color:#888;margin-left:10px;">{pitcher_name}</span></div>')
-    html_parts.append('<div style="display:flex;gap:14px;align-items:center;">')
+    html_parts.append('<div style="display:flex;gap:18px;align-items:center;margin-top:8px;flex-wrap:wrap;">')
     # Arsenal toggle
     html_parts.append(f'<div onclick="window[\'ta_{pt}\']()" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">')
     html_parts.append(f'<div id="toga_{pt}" style="width:32px;height:18px;border-radius:9px;background:#ccc;position:relative;transition:background .18s;flex-shrink:0;">')
     html_parts.append(f'<div id="togaball_{pt}" style="position:absolute;width:12px;height:12px;border-radius:50%;background:white;top:3px;left:3px;transition:left .18s;box-shadow:0 1px 3px rgba(0,0,0,0.2);"></div></div>')
-    html_parts.append('<span style="font-size:12px;color:#888;">show arsenal</span></div>')
+    html_parts.append('<span style="font-size:12px;color:#888;white-space:nowrap;">show arsenal</span></div>')
     # Comps toggle
     html_parts.append(f'<div onclick="window[\'tc_{pt}\']()" style="display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;">')
     html_parts.append(f'<div id="tog_{pt}" style="width:32px;height:18px;border-radius:9px;background:#ccc;position:relative;transition:background .18s;flex-shrink:0;">')
     html_parts.append(f'<div id="togball_{pt}" style="position:absolute;width:12px;height:12px;border-radius:50%;background:white;top:3px;left:3px;transition:left .18s;box-shadow:0 1px 3px rgba(0,0,0,0.2);"></div></div>')
-    html_parts.append('<span style="font-size:12px;color:#888;">show comps</span></div>')
+    html_parts.append('<span style="font-size:12px;color:#888;white-space:nowrap;">show comps</span></div>')
     html_parts.append('</div></div>')
     html_parts.append(f'<div style="position:relative;width:100%;height:600px;">')
     html_parts.append(f'<canvas id="mc_{pt}" role="img" style="position:absolute;top:0;left:0;width:100%;height:100%;" aria-label="Movement profile for {pn}">Current: {cx_f} H {cz_f} V. Target: {ox_f} H {oz_f} V.</canvas>')
@@ -513,19 +535,19 @@ def render_movement_chart(pt, current_pfx_x, current_pfx_z,
     html_parts.append('<svg width="12" height="12"><circle cx="6" cy="6" r="6" fill="#f97316"/></svg> closest to optimal (hover for name)')
     html_parts.append('</div></div>')
     html_parts.append('<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px;">')
-    html_parts.append(f'<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px 14px;">'
+    html_parts.append(f'<div style="background:#faf8f4;border:1px solid #e0dbd0;border-radius:6px;padding:8px 14px;">'
                       f'<div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:5px;">Horizontal Break</div>'
                       f'<div style="display:flex;align-items:center;gap:8px;">'
                       f'<span style="font-size:16px;font-weight:600;color:#1e3a8a;">{cx_f}&quot;</span>'
-                      f'<span style="font-size:13px;color:#94a3b8;">\u2192</span>'
+                      f'<span style="font-size:13px;color:#a89f92;">\u2192</span>'
                       f'<span style="font-size:16px;font-weight:700;color:#92400e;">{ox_f}&quot;</span>'
                       f'<span style="font-size:12px;font-weight:500;color:{dx_col};margin-left:2px;">{dx_s}&quot;</span>'
                       f'</div></div>')
-    html_parts.append(f'<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:8px 14px;">'
+    html_parts.append(f'<div style="background:#faf8f4;border:1px solid #e0dbd0;border-radius:6px;padding:8px 14px;">'
                       f'<div style="font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:0.07em;margin-bottom:5px;">Vertical Break</div>'
                       f'<div style="display:flex;align-items:center;gap:8px;">'
                       f'<span style="font-size:16px;font-weight:600;color:#1e3a8a;">{cz_f}&quot;</span>'
-                      f'<span style="font-size:13px;color:#94a3b8;">\u2192</span>'
+                      f'<span style="font-size:13px;color:#a89f92;">\u2192</span>'
                       f'<span style="font-size:16px;font-weight:700;color:#92400e;">{oz_f}&quot;</span>'
                       f'<span style="font-size:12px;font-weight:500;color:{dz_col};margin-left:2px;">{dz_s}&quot;</span>'
                       f'</div></div>')
@@ -549,7 +571,7 @@ def render_movement_chart(pt, current_pfx_x, current_pfx_z,
 
   window['tc_PT']=function(){
     showC=!showC;
-    document.getElementById('tog_PT').style.background=showC?'#10b981':'#ccc';
+    document.getElementById('tog_PT').style.background=showC?'#1D9E75':'#ccc';
     document.getElementById('togball_PT').style.left=showC?'16px':'3px';
     document.getElementById('cleg_PT').style.opacity=showC?'1':'0.35';
     draw();
@@ -557,7 +579,7 @@ def render_movement_chart(pt, current_pfx_x, current_pfx_z,
 
   window['ta_PT']=function(){
     showA=!showA;
-    document.getElementById('toga_PT').style.background=showA?'#10b981':'#ccc';
+    document.getElementById('toga_PT').style.background=showA?'#1D9E75':'#ccc';
     document.getElementById('togaball_PT').style.left=showA?'16px':'3px';
     draw();
   };
@@ -752,7 +774,7 @@ def render_movement_chart(pt, current_pfx_x, current_pfx_z,
           lines.push('<div>Plate sep: <b>'+td.curr_plate.toFixed(1)+'"</b> &rarr; <b>'+td.opt_plate.toFixed(1)+'"</b></div>');
           lines.push('</div>');
           if(hit.is_pair){
-            lines.push('<div style="margin-top:4px;color:#10b981;font-size:9px;">\u2605 tunnel pair</div>');
+            lines.push('<div style="margin-top:4px;color:#1D9E75;font-size:9px;">\u2605 tunnel pair</div>');
           }
         } else {
           lines.push('<div style="margin-top:2px;font-size:10px;color:#aaa;">not a tunnel pair</div>');
@@ -863,8 +885,8 @@ def render_tunneling_section(selected_pt, selected_pt_info, profile,
     st.markdown(
         '<div style="margin:1.2rem 0 0.6rem;display:flex;align-items:center;gap:10px;">'
         f'<span style="font-family:Barlow Condensed,sans-serif;font-size:1rem;font-weight:800;'
-        f'color:#e8edf8;text-transform:uppercase;letter-spacing:0.04em;">Tunneling Analysis</span>'
-        f'<span style="font-family:DM Mono,monospace;font-size:0.62rem;color:#4a5270;">'
+        f'color:#3a352c;text-transform:uppercase;letter-spacing:0.04em;">Tunneling Analysis</span>'
+        f'<span style="font-family:DM Mono,monospace;font-size:0.62rem;color:#8c857a;">'
         f'— how {pitch_name(selected_pt).lower()} pairs with other pitches</span>'
         '</div>',
         unsafe_allow_html=True
@@ -884,7 +906,7 @@ def render_tunneling_section(selected_pt, selected_pt_info, profile,
 
         # Color the delta: green = better, red = worse, grey = ~same
         if delta > 0.05:
-            d_col = '#10b981'; d_sign = '+'
+            d_col = '#1D9E75'; d_sign = '+'
             d_label = 'better tunneling'
         elif delta < -0.05:
             d_col = '#ef4444'; d_sign = ''
@@ -895,13 +917,13 @@ def render_tunneling_section(selected_pt, selected_pt_info, profile,
 
         # Late-break-ratio quality color
         def lbr_color(r):
-            if r >= 4:   return '#10b981'  # excellent
+            if r >= 4:   return '#1D9E75'  # excellent
             if r >= 2.5: return '#84cc16'  # good
             if r >= 1.5: return '#f59e0b'  # average
             return '#ef4444'                # poor
 
         col.markdown(
-            f'<div style="background:#141927;border:1px solid rgba(255,255,255,0.06);'
+            f'<div style="background:#faf8f4;border:1px solid rgba(255,255,255,0.06);'
             f'border-top:3px solid {pair["other_color"]};border-radius:0 0 8px 8px;'
             f'padding:0.85rem 1rem;height:100%;">'
             f'<div style="display:flex;align-items:center;gap:6px;margin-bottom:0.6rem;">'
@@ -917,11 +939,11 @@ def render_tunneling_section(selected_pt, selected_pt_info, profile,
             f'<div style="display:flex;align-items:baseline;gap:8px;">'
             f'<span style="font-family:Barlow Condensed,sans-serif;font-size:1.4rem;font-weight:800;'
             f'color:{lbr_color(curr_lbr)};line-height:1;">{curr_lbr:.1f}</span>'
-            f'<span style="font-size:0.7rem;color:#4a5270;">→</span>'
+            f'<span style="font-size:0.7rem;color:#8c857a;">→</span>'
             f'<span style="font-family:Barlow Condensed,sans-serif;font-size:1.4rem;font-weight:800;'
             f'color:{lbr_color(opt_lbr)};line-height:1;">{opt_lbr:.1f}</span>'
             f'</div>'
-            f'<div style="font-family:DM Mono,monospace;font-size:0.55rem;color:#4a5270;'
+            f'<div style="font-family:DM Mono,monospace;font-size:0.55rem;color:#8c857a;'
             f'text-transform:uppercase;letter-spacing:0.08em;margin-top:3px;">late break ratio</div>'
             f'</div>'
             f'<div style="text-align:right;">'
@@ -933,13 +955,13 @@ def render_tunneling_section(selected_pt, selected_pt_info, profile,
             f'</div>'
             # Detail rows
             f'<div style="display:flex;justify-content:space-between;padding:3px 0;">'
-            f'<span style="font-family:DM Mono,monospace;font-size:0.6rem;color:#4a5270;">tunnel pt sep</span>'
-            f'<span style="font-family:DM Mono,monospace;font-size:0.65rem;color:#e8edf8;">'
+            f'<span style="font-family:DM Mono,monospace;font-size:0.6rem;color:#8c857a;">tunnel pt sep</span>'
+            f'<span style="font-family:DM Mono,monospace;font-size:0.65rem;color:#3a352c;">'
             f'{curr_tun:.1f}" → {opt_tun:.1f}"</span>'
             f'</div>'
             f'<div style="display:flex;justify-content:space-between;padding:3px 0;">'
-            f'<span style="font-family:DM Mono,monospace;font-size:0.6rem;color:#4a5270;">plate sep</span>'
-            f'<span style="font-family:DM Mono,monospace;font-size:0.65rem;color:#e8edf8;">'
+            f'<span style="font-family:DM Mono,monospace;font-size:0.6rem;color:#8c857a;">plate sep</span>'
+            f'<span style="font-family:DM Mono,monospace;font-size:0.65rem;color:#3a352c;">'
             f'{curr_plate:.1f}" → {opt_plate:.1f}"</span>'
             f'</div>'
             f'</div>',
@@ -1214,26 +1236,26 @@ def render_trajectory_chart(selected_pt, sel_pt_info, profile,
     traj_json = json.dumps(trajectories)
 
     html = f"""
-<div style="background:#fff;border:1px solid #dde3ed;border-radius:10px;padding:1.2rem 1.4rem;margin-bottom:0.75rem;font-family:sans-serif;width:100%;">
+<div style="background:#faf8f4;border:1px solid #e0dbd0;border-radius:10px;padding:1.2rem 1.4rem;margin-bottom:0.75rem;font-family:sans-serif;width:100%;box-sizing:border-box;max-width:100%;overflow-x:hidden;">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
     <div>
-      <span style="font-size:14px;font-weight:700;color:#1a1a2e;">Flight Path Visualization</span>
+      <span style="font-size:14px;font-weight:700;color:#3a352c;">Flight Path Visualization</span>
       <span style="font-size:12px;color:#888;margin-left:10px;">3D trajectories with decision point</span>
     </div>
   </div>
-  <div style="display:grid;grid-template-columns:1fr 280px;gap:14px;">
-    <div style="position:relative;width:100%;height:500px;">
+  <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,240px);gap:14px;align-items:start;max-width:100%;box-sizing:border-box;">
+    <div style="position:relative;width:100%;height:500px;min-width:0;">
       <canvas id="tc_PT_TRAJ" style="position:absolute;top:0;left:0;width:100%;height:100%;"></canvas>
       <div id="tt_PT_TRAJ" style="position:absolute;display:none;background:rgba(0,0,0,0.82);color:white;font-size:11px;padding:5px 9px;border-radius:5px;pointer-events:none;white-space:nowrap;z-index:10;"></div>
     </div>
-    <div style="display:flex;flex-direction:column;gap:8px;">
+    <div style="display:flex;flex-direction:column;gap:8px;min-width:0;">
       <div style="font-size:11px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:0.06em;">
         Separation at Decision Point
       </div>
       <div style="font-size:10px;color:#888;margin-bottom:4px;">
         Other pitches' positions relative to current selected pitch (inches)
       </div>
-      <div style="position:relative;width:100%;aspect-ratio:1;background:rgba(245,158,11,0.05);border:1px solid rgba(245,158,11,0.4);border-radius:6px;">
+      <div style="position:relative;width:100%;aspect-ratio:1;background:rgba(245,158,11,0.05);border:1px solid rgba(245,158,11,0.4);border-radius:6px;overflow:hidden;">
         <canvas id="cs_PT_TRAJ" style="position:absolute;top:0;left:0;width:100%;height:100%;"></canvas>
       </div>
       <div id="cs_legend_PT_TRAJ" style="font-size:10px;color:#666;line-height:1.5;"></div>
@@ -1562,9 +1584,13 @@ def render_trajectory_chart(selected_pt, sel_pt_info, profile,
     maxOff = Math.ceil(maxOff * 1.3);
     if(maxOff < 3) maxOff = 3;
 
-    // Scale: maxOff inches → half of inner area
-    var pad = 22;
+    // Scale: maxOff inches → half of inner area. Padding must reserve room for
+    // the marker (radius 6 + glow ring ~5) AND its adjacent text label (~22px),
+    // or a pitch at the edge of the data range draws its dot/label past the canvas
+    // edge. 34px clears all of that on every side.
+    var pad = 34;
     var innerR = Math.min(csW, csH) / 2 - pad;
+    if(innerR < 20) innerR = 20;
     var csSC2 = innerR / maxOff;  // pixels per inch
 
     function csXY(dx_in, dz_in){
@@ -1620,9 +1646,9 @@ def render_trajectory_chart(selected_pt, sel_pt_info, profile,
     csCtx.font = '9px sans-serif';
     csCtx.fillStyle = '#94a3b8';
     csCtx.textAlign = 'left'; csCtx.textBaseline = 'middle';
-    csCtx.fillText('3B', 4, csCY - 7);
+    csCtx.fillText('3B', 6, csCY - 7);
     csCtx.textAlign = 'right';
-    csCtx.fillText('1B', csW - 4, csCY - 7);
+    csCtx.fillText('1B', csW - 6, csCY - 7);
     csCtx.textAlign = 'center'; csCtx.textBaseline = 'top';
     csCtx.fillText('UP', csCX + 10, 2);
     csCtx.textBaseline = 'bottom';
@@ -1669,8 +1695,8 @@ def render_trajectory_chart(selected_pt, sel_pt_info, profile,
       // Pitch type label next to dot
       var labelX = p.x + r + 4;
       var labelY = p.y;
-      // If too close to right edge, put label on left
-      if(labelX > csW - 22) {
+      // If too close to right edge, put the label on the left side of the dot
+      if(labelX > csW - 26) {
         labelX = p.x - r - 4;
         csCtx.textAlign = 'right';
       } else {
@@ -1704,12 +1730,12 @@ def render_trajectory_chart(selected_pt, sel_pt_info, profile,
         var dzO = (tp.z - optTp.z) * 12;
         var sepO = Math.sqrt(dxO*dxO + dzO*dzO);
         var delta = sepO - sepC;
-        var deltaColor = Math.abs(delta) < 0.3 ? '#888' : (delta < 0 ? '#10b981' : '#ef4444');
+        var deltaColor = Math.abs(delta) < 0.3 ? '#888' : (delta < 0 ? '#1D9E75' : '#ef4444');
         var deltaSign = delta > 0 ? '+' : '';
         lines.push(
-          '<div style="display:flex;justify-content:space-between;padding:2px 0;">' +
-          '<span style="color:' + t.color + ';font-weight:600;">vs ' + t.label + '</span>' +
-          '<span><span style="color:#3b82f6;">' + sepC.toFixed(1) + '"</span> \u2192 ' +
+          '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:6px;padding:2px 0;flex-wrap:wrap;">' +
+          '<span style="color:' + t.color + ';font-weight:600;white-space:nowrap;">vs ' + t.label + '</span>' +
+          '<span style="white-space:nowrap;"><span style="color:#3b82f6;">' + sepC.toFixed(1) + '"</span> \u2192 ' +
           '<span style="color:#f59e0b;">' + sepO.toFixed(1) + '"</span> ' +
           '<span style="color:' + deltaColor + ';font-size:9px;">(' + deltaSign + delta.toFixed(1) + '")</span></span>' +
           '</div>'
@@ -1759,7 +1785,7 @@ def render_pitcher_editor(pid, profile, existing_profiles, norm_tables,
 
     with st.expander("✎ Edit pitcher (override parsed values)", expanded=False):
         st.markdown(
-            '<div style="font-family:DM Mono,monospace;font-size:0.7rem;color:#8892b0;'
+            '<div style="font-family:DM Mono,monospace;font-size:0.7rem;color:#8c857a;'
             'margin-bottom:0.6rem;">Override the values parsed from the CSV. Changing any '
             'value recomputes comps, achievable bounds, and grades. Leave values as-is to '
             'keep the parsed numbers.</div>',
@@ -1908,7 +1934,7 @@ def render_upload_tab(existing_profiles, norm_tables, stuff_models, sensitivity_
     import synthetic_comps
 
     st.markdown(
-        '<div style="font-family:DM Mono,monospace;font-size:0.72rem;color:#8892b0;margin:0.5rem 0 1rem;">'
+        '<div style="font-family:DM Mono,monospace;font-size:0.72rem;color:#8c857a;margin:0.5rem 0 1rem;">'
         'Upload a Trackman or Rapsodo CSV to analyze a pitcher without Statcast data. '
         'The tool builds a profile from mechanics + velocity and recommends optimal shapes. '
         'Stuff+ grades are relative to MLB averages.</div>',
@@ -1946,8 +1972,8 @@ def render_upload_tab(existing_profiles, norm_tables, stuff_models, sensitivity_
                 pts = ', '.join(f"{pitch_name(pt)} ({info.get('n_pitches', info.get('n','?'))})"
                                 for pt, info in syn['pitches'].items())
                 st.markdown(
-                    f'<div style="font-family:DM Mono,monospace;font-size:0.7rem;color:#8892b0;">'
-                    f'<b style="color:#e8edf8;">{syn["player_name"]}</b> '
+                    f'<div style="font-family:DM Mono,monospace;font-size:0.7rem;color:#8c857a;">'
+                    f'<b style="color:#3a352c;">{syn["player_name"]}</b> '
                     f'({syn["p_throws"]}HP) — {pts}</div>',
                     unsafe_allow_html=True
                 )
@@ -1995,15 +2021,21 @@ def render_upload_tab(existing_profiles, norm_tables, stuff_models, sensitivity_
     # Mark this file as loaded so we don't re-parse (and clobber edits) on rerun
     st.session_state['_loaded_csv_sig'] = file_sig
 
+    # Rerun so the search tab's dropdown rebuilds with the just-uploaded pitcher
+    # included. Without this, the upload is stored in session state but the search
+    # options were already built earlier in this same run, so the new pitcher
+    # wouldn't appear until some other interaction forced a rerun.
+    st.rerun()
+
     # Summary of what was loaded
-    st.success(f"Loaded {len(finalized)} pitcher(s). Switch to the Search tab and "
-               f"search their name to analyze.")
+    st.success(f"Loaded {len(finalized)} pitcher(s). Switch to the Search tab — "
+               f"they'll appear at the top of the dropdown, tagged \"(uploaded)\".")
     for sid, syn in finalized.items():
         pts = ', '.join(f"{pitch_name(pt)} ({info['n_pitches']})"
                         for pt, info in syn['pitches'].items())
         st.markdown(
-            f'<div style="font-family:DM Mono,monospace;font-size:0.7rem;color:#8892b0;">'
-            f'<b style="color:#e8edf8;">{syn["player_name"]}</b> ({syn["p_throws"]}HP) — {pts}</div>',
+            f'<div style="font-family:DM Mono,monospace;font-size:0.7rem;color:#8c857a;">'
+            f'<b style="color:#3a352c;">{syn["player_name"]}</b> ({syn["p_throws"]}HP) — {pts}</div>',
             unsafe_allow_html=True
         )
 
@@ -2027,14 +2059,14 @@ def main():
     st.markdown("""
     <div style="margin-bottom:1.5rem;">
       <div style="font-family:Barlow Condensed,sans-serif;font-size:0.65rem;font-weight:700;
-                  color:#4a5270;letter-spacing:0.2em;text-transform:uppercase;margin-bottom:4px;">
+                  color:#8c857a;letter-spacing:0.2em;text-transform:uppercase;margin-bottom:4px;">
         Pitch Scout
       </div>
       <div style="font-family:Barlow Condensed,sans-serif;font-size:2.4rem;font-weight:900;
-                  color:#e8edf8;line-height:1;letter-spacing:0.02em;">
+                  color:#3a352c;line-height:1;letter-spacing:0.02em;">
         Shape Optimizer
       </div>
-      <div style="font-family:DM Mono,monospace;font-size:0.72rem;color:#4a5270;margin-top:4px;">
+      <div style="font-family:DM Mono,monospace;font-size:0.72rem;color:#8c857a;margin-top:4px;">
         Find the optimal movement profile for each pitch given fixed mechanics
       </div>
     </div>
@@ -2048,32 +2080,54 @@ def main():
                           data.get('sensitivity_radii'))
 
     with tab_search:
-        col_search, _ = st.columns([3, 1])
-        with col_search:
-            search = st.text_input("Search pitcher", placeholder="e.g. Woo, Cole, Webb... (Last, First)",
-                                   label_visibility="collapsed")
+        # Build a searchable dropdown of all pitchers, displayed as "First Last".
+        # Streamlit's selectbox filters the list live as you type (matches anywhere
+        # in the label, so first name, last name, or full name all work), and you can
+        # either press enter on the highlighted match or click a name from the list.
+        # Uploaded (synthetic) pitchers are included too, tagged "(uploaded)" so they
+        # stay reachable and are distinguishable from MLB pitchers.
+        # Re-merge synthetic profiles here from the latest session state. The merge
+        # at the top of main() runs BEFORE render_upload_tab() stores a new upload,
+        # so without this a just-uploaded pitcher wouldn't appear in the dropdown
+        # until an extra rerun. Reading session state again here picks it up now.
+        if st.session_state.get('synthetic_profiles'):
+            profiles = {**profiles, **st.session_state['synthetic_profiles']}
+        label_to_pid = {}
+        upload_labels = []
+        mlb_labels = []
+        for pid, p in profiles.items():
+            base = to_first_last(p.get('player_name', ''))
+            if not base:
+                continue
+            if p.get('is_synthetic'):
+                label = f"{base} (uploaded)"
+                upload_labels.append(label)
+            else:
+                label = base
+                mlb_labels.append(label)
+            label_to_pid[label] = pid
+        # Uploaded pitchers first (most likely what the user wants right after upload),
+        # then MLB pitchers alphabetically.
+        sorted_labels = sorted(upload_labels) + sorted(mlb_labels)
 
-    if not search or len(search) < 2:
+        chosen_label = st.selectbox(
+            "Search pitcher",
+            options=sorted_labels,
+            index=None,
+            placeholder="Search a pitcher by name… (e.g. Bryan Woo)",
+            label_visibility="collapsed",
+        )
+
+    if not chosen_label:
         st.markdown(
-            '<div style="font-family:DM Mono,monospace;font-size:0.75rem;color:#4a5270;'
+            '<div style="font-family:DM Mono,monospace;font-size:0.75rem;color:#8c857a;'
             'margin-top:2rem;text-align:center;">Search for a pitcher or upload custom data to begin</div>',
             unsafe_allow_html=True
         )
         return
 
-    matches = [(pid, p) for pid, p in profiles.items()
-               if search.lower() in p.get('player_name', '').lower()]
-
-    if not matches:
-        st.warning(f"No pitcher found matching '{search}' — names are stored as Last, First")
-        return
-
-    if len(matches) > 1:
-        names  = [p['player_name'] for _, p in matches]
-        chosen = st.selectbox("Select pitcher", names, label_visibility="collapsed")
-        pid, profile = next((pid, p) for pid, p in matches if p['player_name'] == chosen)
-    else:
-        pid, profile = matches[0]
+    pid = label_to_pid[chosen_label]
+    profile = profiles[pid]
 
     # For synthetic (uploaded) pitchers, always read the freshest copy from
     # session state so an edit made this session is authoritative even if the
@@ -2083,7 +2137,7 @@ def main():
         if pid in _sp:
             profile = _sp[pid]
 
-    pitcher_name = profile['player_name']
+    pitcher_name = to_first_last(profile['player_name'])
     p_throws     = profile.get('p_throws', 'R')
     pitches      = profile.get('pitches', {})
 
@@ -2094,8 +2148,8 @@ def main():
     # ── Arsenal overview ──────────────────────────────────────────────────
     st.markdown(
         f'<div style="font-family:Barlow Condensed,sans-serif;font-size:1.5rem;font-weight:800;'
-        f'color:#e8edf8;margin:1.2rem 0 0.4rem;">{pitcher_name}'
-        f'<span style="font-size:0.9rem;font-weight:400;color:#4a5270;margin-left:10px;">'
+        f'color:#3a352c;margin:1.2rem 0 0.4rem;">{pitcher_name}'
+        f'<span style="font-size:0.9rem;font-weight:400;color:#8c857a;margin-left:10px;">'
         f'{p_throws}HP</span></div>',
         unsafe_allow_html=True
     )
@@ -2128,12 +2182,12 @@ def main():
             badge_html = (
                 '<div style="display:inline-block;background:rgba(16,185,129,0.18);'
                 'border:1px solid rgba(16,185,129,0.4);border-radius:3px;padding:1px 6px;'
-                'margin-left:6px;font-size:0.5rem;font-weight:700;color:#10b981;'
+                'margin-left:6px;font-size:0.5rem;font-weight:700;color:#1D9E75;'
                 'text-transform:uppercase;letter-spacing:0.04em;">Stuff+ ↑ tun ↑</div>'
             )
             shadow_css = 'box-shadow:0 0 0 1.5px rgba(16,185,129,0.5);'
         col.markdown(
-            f'<div style="background:#141927;border:1px solid rgba(255,255,255,0.06);'
+            f'<div style="background:#faf8f4;border:1px solid rgba(255,255,255,0.06);'
             f'border-top:3px solid {pc};border-radius:0 0 8px 8px;padding:0.8rem 0.9rem;{shadow_css}">'
             f'<div style="font-family:Barlow Condensed,sans-serif;font-size:0.75rem;'
             f'font-weight:700;color:{pc};text-transform:uppercase;margin-bottom:0.5rem;'
@@ -2142,18 +2196,18 @@ def main():
             f'<div style="display:flex;justify-content:space-between;align-items:flex-end;">'
             f'<div>'
             f'<div style="font-family:Barlow Condensed,sans-serif;font-size:1.8rem;'
-            f'font-weight:900;color:{grade_color(sp) if isinstance(sp,float) else "#e8edf8"};'
+            f'font-weight:900;color:{grade_color(sp) if isinstance(sp,float) else "#3a352c"};'
             f'line-height:1;">{sp if isinstance(sp, float) else "—"}</div>'
-            f'<div style="font-family:DM Mono,monospace;font-size:0.55rem;color:#4a5270;'
+            f'<div style="font-family:DM Mono,monospace;font-size:0.55rem;color:#8c857a;'
             f'text-transform:uppercase;letter-spacing:0.08em;">overall Stuff+</div>'
-            f'<div style="font-family:DM Mono,monospace;font-size:0.58rem;color:#3d4560;margin-top:4px;">'
+            f'<div style="font-family:DM Mono,monospace;font-size:0.58rem;color:#b0a99c;margin-top:4px;">'
             f'vs R: {sp_r if isinstance(sp_r, float) else "—"} '
             f'&nbsp;|&nbsp; vs L: {sp_l if isinstance(sp_l, float) else "—"}</div>'
             f'</div>'
             f'<div style="text-align:right;">'
-            f'<div style="font-family:DM Mono,monospace;font-size:0.68rem;color:#4a5270;">Ars+ {ap}</div>'
-            f'<div style="font-family:DM Mono,monospace;font-size:0.68rem;color:#4a5270;">Con+ {cp}</div>'
-            f'<div style="font-family:DM Mono,monospace;font-size:0.58rem;color:#3d4560;">n={info["n"]:,}</div>'
+            f'<div style="font-family:DM Mono,monospace;font-size:0.68rem;color:#8c857a;">Ars+ {ap}</div>'
+            f'<div style="font-family:DM Mono,monospace;font-size:0.68rem;color:#8c857a;">Con+ {cp}</div>'
+            f'<div style="font-family:DM Mono,monospace;font-size:0.58rem;color:#b0a99c;">n={info["n"]:,}</div>'
             f'</div></div></div>',
             unsafe_allow_html=True
         )
@@ -2269,8 +2323,8 @@ def main():
         f'<span style="width:12px;height:12px;border-radius:50%;background:{pc};display:inline-block;"></span>'
         f'<span style="font-family:Barlow Condensed,sans-serif;font-size:1.2rem;font-weight:800;'
         f'color:{pc};text-transform:uppercase;">{pitch_name(selected_pt)}</span>'
-        f'<span style="font-family:DM Mono,monospace;font-size:0.65rem;color:#4a5270;">— shape optimization</span>'
-        f'<span style="font-family:DM Mono,monospace;font-size:0.6rem;color:#3d4560;margin-left:auto;">'
+        f'<span style="font-family:DM Mono,monospace;font-size:0.65rem;color:#8c857a;">— shape optimization</span>'
+        f'<span style="font-family:DM Mono,monospace;font-size:0.6rem;color:#b0a99c;margin-left:auto;">'
         f'weighted {rhh_w:.0%} RHH / {lhh_w:.0%} LHH · comp-derived bounds</span>'
         f'</div>',
         unsafe_allow_html=True
@@ -2407,7 +2461,7 @@ def main():
         with st.expander("📊 What drives this pitch's grade", expanded=False):
             imp = feat_imp[selected_pt]
             st.markdown(
-                f'<div style="font-family:DM Mono,monospace;font-size:0.65rem;color:#4a5270;'
+                f'<div style="font-family:DM Mono,monospace;font-size:0.65rem;color:#8c857a;'
                 f'margin-bottom:0.75rem;">Feature importance — RV model '
                 f'({pitch_name(selected_pt)}, averaged across matchups)</div>',
                 unsafe_allow_html=True
@@ -2433,21 +2487,21 @@ def main():
                 col_feat, col_bar, col_pct = st.columns([2, 4, 1])
                 col_feat.markdown(
                     f'<span style="font-family:DM Mono,monospace;font-size:0.68rem;'
-                    f'color:#8892b0;">{label}</span>', unsafe_allow_html=True)
+                    f'color:#8c857a;">{label}</span>', unsafe_allow_html=True)
                 col_bar.markdown(
-                    f'<div style="background:#232840;border-radius:3px;height:6px;margin-top:6px;">'
+                    f'<div style="background:#e8e3d9;border-radius:3px;height:6px;margin-top:6px;">'
                     f'<div style="width:{min(bar_w,100)}%;height:6px;border-radius:3px;'
                     f'background:{pc};"></div></div>', unsafe_allow_html=True)
                 col_pct.markdown(
                     f'<span style="font-family:DM Mono,monospace;font-size:0.68rem;'
-                    f'color:#4a5270;">{pct:.1f}%</span>', unsafe_allow_html=True)
+                    f'color:#8c857a;">{pct:.1f}%</span>', unsafe_allow_html=True)
 
     # ── Optimization bounds ───────────────────────────────────────────────
     with st.expander("⚙️ Optimization bounds", expanded=False):
         fixed = pt_info['fixed']
         semi  = pt_info['semi_fixed']
         st.markdown(
-            f'<div style="font-family:DM Mono,monospace;font-size:0.65rem;color:#4a5270;'
+            f'<div style="font-family:DM Mono,monospace;font-size:0.65rem;color:#8c857a;'
             f'margin-bottom:0.6rem;">Fixed and semi-fixed attributes — '
             f'{pitcher_name} {pitch_name(selected_pt)}</div>',
             unsafe_allow_html=True
@@ -2462,15 +2516,15 @@ def main():
             ('Extension',       f"{fixed.get('release_extension', 6):.2f} ft",          'fixed'),
             ('Active spin',     f"{fixed.get('spin_efficiency'):.0f} rpm" if fixed.get('spin_efficiency') else '—', 'fixed'),
         ]
-        cat_colors = {'fixed': '#ef4444', 'semi-fixed': '#f59e0b', 'optimizable': '#10b981'}
+        cat_colors = {'fixed': '#ef4444', 'semi-fixed': '#f59e0b', 'optimizable': '#1D9E75'}
         for label, val, cat in rows:
             cc = cat_colors[cat]
             st.markdown(
                 f'<div style="display:flex;justify-content:space-between;align-items:center;'
                 f'padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.04);">'
-                f'<span style="font-family:DM Mono,monospace;font-size:0.68rem;color:#8892b0;">{label}</span>'
+                f'<span style="font-family:DM Mono,monospace;font-size:0.68rem;color:#8c857a;">{label}</span>'
                 f'<div style="display:flex;align-items:center;gap:8px;">'
-                f'<span style="font-family:DM Mono,monospace;font-size:0.68rem;color:#e8edf8;">{val}</span>'
+                f'<span style="font-family:DM Mono,monospace;font-size:0.68rem;color:#3a352c;">{val}</span>'
                 f'<span style="font-family:Barlow Condensed,sans-serif;font-size:0.58rem;font-weight:700;'
                 f'color:{cc};text-transform:uppercase;letter-spacing:0.08em;">{cat}</span>'
                 f'</div></div>',
