@@ -313,3 +313,81 @@ def optimized_vaa(current_vaa_measured, current_pfx_x, current_pfx_z,
     if v_cur is None or v_opt is None:
         return current_vaa_measured
     return float(current_vaa_measured + (v_opt - v_cur))
+
+
+# ── Vectorized VAA (batch) ─────────────────────────────────────────────────
+def vaa_from_shape_batch(pfx_z_arr, release_speed_mph,
+                         release_y, release_z,
+                         vy0_actual=None, vz0_actual=None, ay_actual=None,
+                         y0=50.0, y_plate=1.417):
+    """
+    Vectorized version of vaa_from_shape over an array of candidate pfx_z
+    values. VAA does not depend on horizontal break, so only pfx_z is needed.
+    Mirrors the scalar path exactly: derive az from the shape (Magnus + gravity),
+    keep vy0/vz0/ay from the pitcher's actual trajectory when available, then
+    apply the plate-crossing kinematics. Returns an array of VAA in degrees,
+    or None if the trajectory has no valid plate crossing (matches scalar API).
+    """
+    pfx_z_arr = np.asarray(pfx_z_arr, dtype=float)
+    speed_fps = release_speed_mph * 1.467
+
+    if vy0_actual is not None and vz0_actual is not None:
+        vy0, vz0 = vy0_actual, vz0_actual
+    else:
+        flight_dist = release_y
+        vy0 = -speed_fps
+        vz0 = -speed_fps * np.sin(np.arctan2(release_z - 2.5, flight_dist))
+
+    avg_vy   = abs(vy0) - 5.0
+    t_flight = (50.0 - 1.417) / avg_vy
+    az = 2 * (pfx_z_arr / 12.0) / (t_flight ** 2) + GRAVITY
+
+    if ay_actual is not None:
+        ay = ay_actual
+    else:
+        ay = -0.0023 * speed_fps ** 2 / (release_speed_mph / 95)
+
+    # Kinematic time to the plate — depends only on vy0/ay, so it is a scalar
+    # shared by every candidate shape (identical to vaa_from_trajectory).
+    a = 0.5 * ay
+    b = vy0
+    c = y0 - y_plate
+    disc = b * b - 4 * a * c
+    if disc < 0:
+        return None
+    sqrt_disc = np.sqrt(disc)
+    t1 = (-b - sqrt_disc) / (2 * a)
+    t2 = (-b + sqrt_disc) / (2 * a)
+    t = t1 if (t1 > 0 and (t1 < t2 or t2 <= 0)) else t2
+    if t <= 0:
+        return None
+
+    vz_plate = vz0 + az * t
+    vy_plate = vy0 + ay * t
+    return np.degrees(np.arctan2(vz_plate, abs(vy_plate)))
+
+
+def optimized_vaa_batch(current_vaa_measured, current_pfx_z, cand_pfx_z_arr,
+                        release_speed_mph, release_y, release_z,
+                        vy0_actual=None, vz0_actual=None, ay_actual=None):
+    """
+    Vectorized delta-method VAA for an array of candidate shapes:
+      vaa[i] = measured_current_VAA + (vaa_shape(cand[i]) - vaa_shape(current))
+    Same semantics as optimized_vaa, evaluated for all candidates at once.
+    Returns an array; falls back to the measured value (or raw shape VAA when
+    no measurement exists) exactly like the scalar version.
+    """
+    cand_pfx_z_arr = np.asarray(cand_pfx_z_arr, dtype=float)
+    v_cand = vaa_from_shape_batch(cand_pfx_z_arr, release_speed_mph,
+                                  release_y, release_z,
+                                  vy0_actual, vz0_actual, ay_actual)
+    if current_vaa_measured is None:
+        return v_cand  # may be None; caller handles fallback
+    if v_cand is None:
+        return np.full(cand_pfx_z_arr.shape, float(current_vaa_measured))
+    v_cur = vaa_from_shape_batch(np.array([current_pfx_z]), release_speed_mph,
+                                 release_y, release_z,
+                                 vy0_actual, vz0_actual, ay_actual)
+    if v_cur is None:
+        return np.full(cand_pfx_z_arr.shape, float(current_vaa_measured))
+    return current_vaa_measured + (v_cand - v_cur[0])

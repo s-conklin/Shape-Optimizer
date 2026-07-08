@@ -179,3 +179,24 @@ class PitchScoutStuffModel(StuffModelInterface):
             result['contact_plus']  = round((hh_plus + xw_plus) / 2, 1)
 
         return result
+
+    # ── Batch prediction ──────────────────────────────────────────────────
+    def predict_rv_batch(self, feature_arrays: dict, n: int) -> np.ndarray:
+        """
+        Predict run value for n candidate shapes in ONE model call.
+
+        feature_arrays maps feature name -> scalar or length-n array.
+        Batching matters enormously on constrained hosts: n single-row
+        XGBoost predictions each pay fixed per-call overhead, while one
+        n-row prediction pays it once.
+        """
+        if 'rv' not in self._mpt:
+            return np.zeros(n, dtype=float)
+        feat_cols = self._mpt['feature_cols']
+        X = np.empty((n, len(feat_cols)), dtype=float)
+        for j, c in enumerate(feat_cols):
+            v = feature_arrays.get(c, 0.0)
+            if v is None:
+                v = 0.0
+            X[:, j] = v  # broadcasts scalars, copies arrays
+        return np.asarray(self._predict(self._mpt['rv'], X), dtype=float)

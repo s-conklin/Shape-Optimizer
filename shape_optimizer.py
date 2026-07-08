@@ -2,7 +2,6 @@ import streamlit as st
 import pickle
 import numpy as np
 import pandas as pd
-from scipy.optimize import minimize
 import os
 import sys
 
@@ -146,6 +145,14 @@ def load_data():
                     if os.path.exists(local_path):
                         m = xgb.Booster()
                         m.load_model(local_path)
+                        # Cloud hosts report many CPU cores but grant a fraction
+                        # of one; XGBoost's default per-core threading then adds
+                        # large overhead to every predict. Single-threaded is
+                        # faster and predictable for our small batch sizes.
+                        try:
+                            m.set_param({'nthread': 1})
+                        except Exception:
+                            pass
                         mpt[metric] = m
             stuff_models[key] = mpt
         data['stuff_models'] = stuff_models
@@ -289,12 +296,95 @@ def predict_weighted_grades(pt, pfx_x, pfx_z, spin_eff, velo, profile_info,
             combined[metric] = vl
     return combined, gr, gl
 
-# ── Optimizer: coarse grid + scipy refinement ────────────────────────────
+# ── Batched feature building ──────────────────────────────────────────────
+def build_feature_arrays(pt, pfx_x_arr, pfx_z_arr, spin_eff, velo, profile_info):
+    """
+    Vectorized build_features: same feature definitions, but pfx_x/pfx_z are
+    length-n arrays and per-candidate features come back as arrays (constants
+    stay scalars). This lets the optimizer grade an entire grid of candidate
+    shapes with ONE XGBoost call instead of one call per candidate — the
+    difference between ~2 seconds and ~30+ seconds on a constrained cloud CPU.
+    """
+    pfx_x_arr = np.asarray(pfx_x_arr, dtype=float)
+    pfx_z_arr = np.asarray(pfx_z_arr, dtype=float)
+
+    fixed    = profile_info['fixed']
+    semi     = profile_info['semi_fixed']
+    fb_velo  = profile_info.get('primary_fb_velo')
+    fb_pfx_x = profile_info.get('primary_fb_pfx_x')
+    fb_pfx_z = profile_info.get('primary_fb_pfx_z')
+
+    if pt in FASTBALL_TYPES or fb_velo is None:
+        vdiff, xdiff, zdiff = 0.0, 0.0, 0.0
+    else:
+        vdiff = (fb_velo - velo)
+        xdiff = pfx_x_arr - (fb_pfx_x or 0.0)
+        zdiff = pfx_z_arr - (fb_pfx_z or 0.0)
+
+    ext      = fixed.get('release_extension', 6.0) or 6.0
+    spin_ax  = semi.get('spin_axis_mean') or 180.0
+    ssw_val  = np.radians(spin_ax) * (spin_eff or 0.0)
+
+    # VAA via the delta method, vectorized over candidates (see build_features)
+    measured_vaa = fixed.get('vaa_mean')
+    cur_pfx_z    = profile_info.get('optimizable', {}).get('pfx_z_mean')
+    vaa_val = measured_vaa if measured_vaa is not None else -5.0
+    if measured_vaa is not None and cur_pfx_z is not None:
+        try:
+            from tunneling import optimized_vaa_batch
+            rpy = fixed.get('release_pos_y') or (60.5 - ext)
+            derived = optimized_vaa_batch(
+                measured_vaa, cur_pfx_z, pfx_z_arr, velo,
+                rpy, fixed.get('release_pos_z', 6.0) or 6.0,
+                vy0_actual=fixed.get('vy0'), vz0_actual=fixed.get('vz0'),
+                ay_actual=fixed.get('ay'),
+            )
+            if derived is not None:
+                vaa_val = derived
+        except Exception:
+            pass
+
+    return {
+        'release_speed':       velo,
+        'pfx_x_in':            pfx_x_arr,
+        'pfx_z_in':            pfx_z_arr,
+        'release_pos_x':       fixed.get('release_pos_x', 0.0) or 0.0,
+        'release_pos_z':       fixed.get('release_pos_z', 6.0) or 6.0,
+        'release_extension':   ext,
+        'velo_diff_fb':        vdiff,
+        'pfx_x_diff_fb':       xdiff,
+        'pfx_z_diff_fb':       zdiff,
+        'vaa':                 vaa_val,
+        'spin_axis':           spin_ax,
+        'spin_efficiency_raw': spin_eff or 0.0,
+        'ssw_interaction':     ssw_val,
+    }
+
+
+def _grid_candidates(pfx_x_bounds, pfx_z_bounds, n_per_axis, extra_points=None):
+    """Flattened meshgrid of candidate (pfx_x, pfx_z) pairs, plus any extras."""
+    x_vals = np.linspace(pfx_x_bounds[0], pfx_x_bounds[1], n_per_axis)
+    z_vals = np.linspace(pfx_z_bounds[0], pfx_z_bounds[1], n_per_axis)
+    gx, gz = np.meshgrid(x_vals, z_vals)
+    xs, zs = gx.ravel(), gz.ravel()
+    if extra_points:
+        ex = np.array([p[0] for p in extra_points], dtype=float)
+        ez = np.array([p[1] for p in extra_points], dtype=float)
+        xs = np.concatenate([xs, ex])
+        zs = np.concatenate([zs, ez])
+    return xs, zs
+
+
+# ── Optimizer: batched coarse grid + batched fine refinement ─────────────
 def run_optimizer(pt, profile_info, norm_tables, stuff_models, stand='R'):
     """
-    Two-phase optimizer:
-    1. Coarse 20x20 grid over pfx_x x pfx_z to find global region
-    2. Scipy L-BFGS-B refinement starting from best grid point
+    Two-phase optimizer, fully batched:
+    1. Coarse 20x20 grid over pfx_x x pfx_z (one batched model call)
+    2. Fine 21x21 grid zoomed one coarse cell around the best point,
+       clipped to bounds (one more batched call) — resolution ~range/190,
+       finer than pitch-tracking measurement precision.
+    The current shape is always included as a candidate, so the optimizer
+    can never return something worse than what the pitcher already throws.
     Spin efficiency fixed at pitcher's current value — it constrains
     what movement is achievable (via comp filtering) but is not itself
     a recommendation target.
@@ -308,39 +398,37 @@ def run_optimizer(pt, profile_info, norm_tables, stuff_models, stand='R'):
 
     pfx_x_bounds = (opt['pfx_x_lo'], opt['pfx_x_hi'])
     pfx_z_bounds = (opt['pfx_z_lo'], opt['pfx_z_hi'])
-    bounds       = [pfx_x_bounds, pfx_z_bounds]
 
     model = PitchScoutStuffModel(stuff_models, norm_tables, p_throws, stand, pt)
 
-    def objective(x):
-        pfx_x, pfx_z = x
-        features = build_features(pt, pfx_x, pfx_z, curr_se, velo, profile_info)
-        return model.predict_rv(features)
+    def batch_rv(xs, zs):
+        feats = build_feature_arrays(pt, xs, zs, curr_se, velo, profile_info)
+        return model.predict_rv_batch(feats, len(xs))
 
-    # Phase 1 — coarse 20x20 grid
-    x_vals = np.linspace(pfx_x_bounds[0], pfx_x_bounds[1], 20)
-    z_vals = np.linspace(pfx_z_bounds[0], pfx_z_bounds[1], 20)
-    best_rv    = float('inf')
-    best_x0    = [opt.get('pfx_x_mean', (pfx_x_bounds[0]+pfx_x_bounds[1])/2),
-                  opt.get('pfx_z_mean', (pfx_z_bounds[0]+pfx_z_bounds[1])/2)]
+    curr_pt = (opt.get('pfx_x_mean', (pfx_x_bounds[0]+pfx_x_bounds[1])/2),
+               opt.get('pfx_z_mean', (pfx_z_bounds[0]+pfx_z_bounds[1])/2))
 
-    for px in x_vals:
-        for pz in z_vals:
-            rv = objective([px, pz])
-            if rv < best_rv:
-                best_rv = rv
-                best_x0 = [px, pz]
+    # Phase 1 — coarse 20x20 grid (+ current shape), one model call
+    xs, zs = _grid_candidates(pfx_x_bounds, pfx_z_bounds, 20,
+                              extra_points=[curr_pt])
+    rvs = batch_rv(xs, zs)
+    i   = int(np.argmin(rvs))
+    best_x, best_z, best_rv = xs[i], zs[i], rvs[i]
 
-    # Phase 2 — scipy refinement from best grid point
-    try:
-        result = minimize(
-            objective, x0=best_x0, bounds=bounds,
-            method='L-BFGS-B',
-            options={'maxiter': 200, 'ftol': 1e-9},
-        )
-        opt_pfx_x, opt_pfx_z = result.x
-    except Exception:
-        opt_pfx_x, opt_pfx_z = best_x0
+    # Phase 2 — fine grid one coarse cell around the best point, one model call
+    cell_x = (pfx_x_bounds[1] - pfx_x_bounds[0]) / 19.0
+    cell_z = (pfx_z_bounds[1] - pfx_z_bounds[0]) / 19.0
+    fine_x = (max(pfx_x_bounds[0], best_x - cell_x),
+              min(pfx_x_bounds[1], best_x + cell_x))
+    fine_z = (max(pfx_z_bounds[0], best_z - cell_z),
+              min(pfx_z_bounds[1], best_z + cell_z))
+    fxs, fzs = _grid_candidates(fine_x, fine_z, 21)
+    frvs = batch_rv(fxs, fzs)
+    j = int(np.argmin(frvs))
+    if frvs[j] < best_rv:
+        best_x, best_z = fxs[j], fzs[j]
+
+    opt_pfx_x, opt_pfx_z = best_x, best_z
 
     best_grades = predict_grades(
         pt, float(opt_pfx_x), float(opt_pfx_z), curr_se,
@@ -348,6 +436,55 @@ def run_optimizer(pt, profile_info, norm_tables, stuff_models, stand='R'):
     )
 
     return float(opt_pfx_x), float(opt_pfx_z), curr_se, best_grades
+
+
+def run_optimizer_combined(pt, profile_info, norm_tables, stuff_models,
+                           rhh_w=0.58, lhh_w=0.42):
+    """
+    Batched optimizer over the handedness-WEIGHTED run value
+    (rhh_w * RV_vs_R + lhh_w * RV_vs_L). Same two-phase grid strategy as
+    run_optimizer; two batched model calls per phase (one per matchup).
+    Returns (opt_pfx_x, opt_pfx_z).
+    """
+    p_throws = profile_info.get('p_throws', 'R')
+    opt      = profile_info['optimizable']
+    velo     = profile_info['semi_fixed']['velo_mean']
+    curr_se  = profile_info['fixed'].get('spin_efficiency')
+
+    pfx_x_bounds = (opt['pfx_x_lo'], opt['pfx_x_hi'])
+    pfx_z_bounds = (opt['pfx_z_lo'], opt['pfx_z_hi'])
+
+    model_r = PitchScoutStuffModel(stuff_models, norm_tables, p_throws, 'R', pt)
+    model_l = PitchScoutStuffModel(stuff_models, norm_tables, p_throws, 'L', pt)
+
+    def batch_rv(xs, zs):
+        feats = build_feature_arrays(pt, xs, zs, curr_se, velo, profile_info)
+        n = len(xs)
+        return (model_r.predict_rv_batch(feats, n) * rhh_w +
+                model_l.predict_rv_batch(feats, n) * lhh_w)
+
+    curr_pt = (opt.get('pfx_x_mean', (pfx_x_bounds[0]+pfx_x_bounds[1])/2),
+               opt.get('pfx_z_mean', (pfx_z_bounds[0]+pfx_z_bounds[1])/2))
+
+    xs, zs = _grid_candidates(pfx_x_bounds, pfx_z_bounds, 20,
+                              extra_points=[curr_pt])
+    rvs = batch_rv(xs, zs)
+    i   = int(np.argmin(rvs))
+    best_x, best_z, best_rv = xs[i], zs[i], rvs[i]
+
+    cell_x = (pfx_x_bounds[1] - pfx_x_bounds[0]) / 19.0
+    cell_z = (pfx_z_bounds[1] - pfx_z_bounds[0]) / 19.0
+    fine_x = (max(pfx_x_bounds[0], best_x - cell_x),
+              min(pfx_x_bounds[1], best_x + cell_x))
+    fine_z = (max(pfx_z_bounds[0], best_z - cell_z),
+              min(pfx_z_bounds[1], best_z + cell_z))
+    fxs, fzs = _grid_candidates(fine_x, fine_z, 21)
+    frvs = batch_rv(fxs, fzs)
+    j = int(np.argmin(frvs))
+    if frvs[j] < best_rv:
+        best_x, best_z = fxs[j], fzs[j]
+
+    return float(best_x), float(best_z)
 
 # ── Shape card renderer ───────────────────────────────────────────────────
 def render_shape_card(title, pt, current_grades, opt_grades,
@@ -1021,6 +1158,10 @@ def compute_arsenal_improvements(profile, norm_tables, stuff_models):
     pitches = profile.get('pitches', {})
     result = {}
 
+    rhh_w = norm_tables.get('rhh_weight', 0.58)
+    lhh_w = norm_tables.get('lhh_weight', 0.42)
+    p_throws = profile.get('p_throws', 'R')
+
     # Pre-build pitch dicts for all pitches that have trajectory data
     pitch_dicts = {}
     for pt, info in pitches.items():
@@ -1039,10 +1180,27 @@ def compute_arsenal_improvements(profile, norm_tables, stuff_models):
             result[pt] = {'improves_both': False}
             continue
 
+        # Enrich pitch info the same way main() does before optimizing —
+        # build_features needs p_throws and the primary-fastball reference
+        # for the differential features on secondary pitches.
+        info = dict(info)
+        info['p_throws']         = p_throws
+        info['primary_fb_velo']  = profile.get('primary_fb_velo')
+        info['primary_fb_pfx_x'] = profile.get('primary_fb_pfx_x')
+        info['primary_fb_pfx_z'] = profile.get('primary_fb_pfx_z')
+
         try:
-            opt_pfx_x, opt_pfx_z, _, opt_grades = run_optimizer(
-                pt, info, norm_tables, stuff_models, stand='C'
-            )
+            # NOTE: this previously called run_optimizer with stand='C', but no
+            # combined-handedness models exist — every prediction returned 0.0,
+            # so badges were computed from a meaningless shape. Use the real
+            # handedness-weighted combined optimization instead.
+            opt_pfx_x, opt_pfx_z = run_optimizer_combined(
+                pt, info, norm_tables, stuff_models, rhh_w=rhh_w, lhh_w=lhh_w)
+            velo_i = info.get('semi_fixed', {}).get('velo_mean', 90)
+            opt_grades, _, _ = predict_weighted_grades(
+                pt, opt_pfx_x, opt_pfx_z,
+                info['fixed'].get('spin_efficiency'), velo_i,
+                info, norm_tables, stuff_models)
         except Exception:
             result[pt] = {'improves_both': False}
             continue
@@ -2154,9 +2312,25 @@ def main():
         unsafe_allow_html=True
     )
 
-    # Precompute which pitches improve both Stuff+ and tunneling when optimized
-    with st.spinner("Analyzing arsenal..."):
-        arsenal_improvements = compute_arsenal_improvements(profile, norm_tables, stuff_models)
+    # Precompute which pitches improve both Stuff+ and tunneling when optimized.
+    # Streamlit reruns this whole script on EVERY interaction (selecting a pitch,
+    # toggling anything), so cache the result per pitcher-state in session state —
+    # it only recomputes when the pitcher or their edited values actually change.
+    import hashlib as _hashlib, json as _json
+    try:
+        _prof_fingerprint = _hashlib.md5(
+            _json.dumps(profile, default=str, sort_keys=True).encode()
+        ).hexdigest()
+    except Exception:
+        _prof_fingerprint = str(id(profile))
+    _arsenal_key = (pid, _prof_fingerprint)
+    _cache = st.session_state.setdefault('_arsenal_improvements_cache', {})
+    if _arsenal_key not in _cache:
+        with st.spinner("Analyzing arsenal..."):
+            _cache.clear()  # keep only the current pitcher's result
+            _cache[_arsenal_key] = compute_arsenal_improvements(
+                profile, norm_tables, stuff_models)
+    arsenal_improvements = _cache[_arsenal_key]
 
     # Arsenal grade cards — show combined + per-handedness grades
     n_pitches = len(pitches)
@@ -2262,44 +2436,12 @@ def main():
         curr_r = pt_info.get('grades_rhh', {})
         curr_l = pt_info.get('grades_lhh', {})
 
-        # Combined weighted optimal — find the shape that maximizes
-        # the weighted average Stuff+ across both handedness matchups
-        def combined_rv(pfx_x, pfx_z):
-            p_throws = pt_info.get('p_throws', 'R')
-            model_r  = PitchScoutStuffModel(stuff_models, norm_tables, p_throws, 'R', selected_pt)
-            model_l  = PitchScoutStuffModel(stuff_models, norm_tables, p_throws, 'L', selected_pt)
-            feat_r   = build_features(selected_pt, pfx_x, pfx_z, curr_spin_eff, curr_velo, pt_info)
-            feat_l   = build_features(selected_pt, pfx_x, pfx_z, curr_spin_eff, curr_velo, pt_info)
-            rv_r     = model_r.predict_rv(feat_r)
-            rv_l     = model_l.predict_rv(feat_l)
-            return rv_r * rhh_w + rv_l * lhh_w
-
-        # Coarse grid on combined objective
-        opt_bounds = pt_info['optimizable']
-        x_vals     = np.linspace(opt_bounds['pfx_x_lo'], opt_bounds['pfx_x_hi'], 20)
-        z_vals     = np.linspace(opt_bounds['pfx_z_lo'], opt_bounds['pfx_z_hi'], 20)
-        best_rv_c  = float('inf')
-        best_x0_c  = [curr_pfx_x, curr_pfx_z]
-        for px in x_vals:
-            for pz in z_vals:
-                rv = combined_rv(px, pz)
-                if rv < best_rv_c:
-                    best_rv_c = rv
-                    best_x0_c = [px, pz]
-
-        # Scipy refinement on combined objective
-        try:
-            res = minimize(
-                lambda x: combined_rv(x[0], x[1]),
-                x0=best_x0_c,
-                bounds=[(opt_bounds['pfx_x_lo'], opt_bounds['pfx_x_hi']),
-                        (opt_bounds['pfx_z_lo'], opt_bounds['pfx_z_hi'])],
-                method='L-BFGS-B',
-                options={'maxiter': 200, 'ftol': 1e-9},
-            )
-            bx_c, bz_c = res.x
-        except Exception:
-            bx_c, bz_c = best_x0_c
+        # Combined weighted optimal — find the shape that maximizes the
+        # weighted average across both handedness matchups. Fully batched:
+        # two model calls per grid phase instead of one per candidate.
+        bx_c, bz_c = run_optimizer_combined(
+            selected_pt, pt_info, norm_tables, stuff_models,
+            rhh_w=rhh_w, lhh_w=lhh_w)
 
         curr_c = pt_info.get('grades', {})
         best_c, _, _ = predict_weighted_grades(
@@ -2437,7 +2579,7 @@ def main():
                               float(bx_c), float(bz_c), curr_velo)
 
     # ── 3D trajectory visualization ───────────────────────────────────────────────────
-    with st.expander("📊 View flight paths", expanded=False):
+    with st.expander("📊 View flight paths", expanded=True):
         render_trajectory_chart(selected_pt, pt_info, profile,
                                 float(bx_c), float(bz_c), curr_velo)
 
